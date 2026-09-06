@@ -1,0 +1,66 @@
+import { Router } from "express";
+import { pool } from "../db.js";
+
+const router = Router();
+
+// LISTAR HISTÓRICO DE ABASTECIMENTOS DE UM PONTO
+router.get("/point/:pointId", async (req, res) => {
+  try {
+    const { pointId } = req.params;
+    const { rows } = await pool.query(
+      "SELECT * FROM supplies WHERE point_id = $1 ORDER BY supplied_at DESC",
+      [pointId]
+    );
+    return res.json(rows);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Erro ao buscar histórico de abastecimentos" });
+  }
+});
+
+// REGISTRAR NOVO ABASTECIMENTO
+router.post("/", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { point_id, supplied_water, supplied_food, notes, supplied_at } = req.body;
+
+    if (!point_id) {
+      return res.status(400).json({ error: "O ID do ponto é obrigatório" });
+    }
+
+    await client.query("BEGIN");
+
+    // 1. Grava no histórico de abastecimento
+    const insertSupplyQuery = `
+      INSERT INTO supplies (point_id, supplied_water, supplied_food, notes, supplied_at)
+      VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_TIMESTAMP))
+      RETURNING *;
+    `;
+    const supplyValues = [point_id, !!supplied_water, !!supplied_food, notes || "", supplied_at || null];
+    const supplyResult = await client.query(insertSupplyQuery, supplyValues);
+
+    // 2. Atualiza os dados de status no ponto correspondente
+    const updatePointQuery = `
+      UPDATE points 
+      SET water = CASE WHEN $1 = true THEN true ELSE water END,
+          food = CASE WHEN $2 = true THEN true ELSE food END,
+          status = 'green',
+          status_text = 'Abastecido',
+          last_supply = 'Agora mesmo'
+      WHERE id = $3
+      RETURNING *;
+    `;
+    await client.query(updatePointQuery, [!!supplied_water, !!supplied_food, point_id]);
+
+    await client.query("COMMIT");
+    return res.status(201).json(supplyResult.rows[0]);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error(error);
+    return res.status(500).json({ error: "Erro ao registrar abastecimento" });
+  } finally {
+    client.release();
+  }
+});
+
+export default router;
