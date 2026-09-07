@@ -13,44 +13,75 @@ async function hashPassword(password) {
 }
 
 async function verifyPassword(password, storedHash) {
+  if (!storedHash || !storedHash.includes(":")) return false;
   const [salt, key] = storedHash.split(":");
-  if (!salt || !key) return false;
   const derivedKey = await scrypt(password, salt, 64);
   return crypto.timingSafeEqual(Buffer.from(key, "hex"), derivedKey);
 }
 
+// POST /api/auth/register
 router.post("/register", async (req, res) => {
-  const { name, email, password } = req.body;
-  if (!name || !email || !password || password.length < 6) {
-    return res.status(400).json({ error: "Nome, e-mail e senha com no mínimo 6 caracteres são obrigatórios" });
-  }
   try {
-    const passwordHash = await hashPassword(password);
-    const { rows } = await pool.query(
-      "INSERT INTO users (name, email, password_hash) VALUES ($1, LOWER($2), $3) RETURNING id, name, email",
-      [name.trim(), email.trim(), passwordHash],
-    );
+    const { name, email, password, role } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "Nome, email e senha são obrigatórios." });
+    }
+
+    const userRole = role === "admin" ? "admin" : "user";
+    const hashedPassword = await hashPassword(password);
+
+    // Salva na coluna password_hash esperada pelo banco
+    const query = `
+      INSERT INTO users (name, email, password_hash, role)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, name, email, role;
+    `;
+    const { rows } = await pool.query(query, [name, email, hashedPassword, userRole]);
+
     return res.status(201).json(rows[0]);
   } catch (error) {
-    if (error.code === "23505") return res.status(409).json({ error: "Este e-mail já está cadastrado" });
-    console.error(error);
-    return res.status(500).json({ error: "Erro ao criar conta" });
+    console.error("ERRO NO CADASTRO:", error);
+    if (error.code === "23505") {
+      return res.status(409).json({ error: "Este e-mail já está cadastrado." });
+    }
+    return res.status(500).json({ error: "Erro ao cadastrar usuário." });
   }
 });
 
+// POST /api/auth/login
 router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: "E-mail e senha são obrigatórios" });
   try {
-    const { rows } = await pool.query("SELECT id, name, email, password_hash FROM users WHERE email = LOWER($1)", [email.trim()]);
-    if (!rows[0] || !(await verifyPassword(password, rows[0].password_hash))) {
-      return res.status(401).json({ error: "E-mail ou senha inválidos" });
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "E-mail e senha são obrigatórios." });
     }
-    const { password_hash: _, ...user } = rows[0];
+
+    // Busca pelo password_hash
+    const query = `SELECT id, name, email, role, password_hash FROM users WHERE email = $1;`;
+    const { rows } = await pool.query(query, [email]);
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: "Credenciais inválidas." });
+    }
+
+    const isValid = await verifyPassword(password, rows[0].password_hash);
+    if (!isValid) {
+      return res.status(401).json({ error: "Credenciais inválidas." });
+    }
+
+    const user = {
+      id: rows[0].id,
+      name: rows[0].name,
+      email: rows[0].email,
+      role: rows[0].role || "user",
+    };
+
     return res.json(user);
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Erro ao fazer login" });
+    console.error("ERRO NO LOGIN:", error);
+    return res.status(500).json({ error: "Erro ao autenticar usuário." });
   }
 });
 

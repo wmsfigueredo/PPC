@@ -546,4 +546,19 @@ button.link:hover {
     background: none;
     color: var(--text-muted);
   }
+  /* Fix para markers do Leaflet */
+.custom-leaflet-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.marker.m-blue {
+  background: #2563eb;
+  color: #fff;
+}
+
+/* O container do Leaflet precisa de z-index controlado */
+.leaflet-container {
+  z-index: 1;
+}
 }

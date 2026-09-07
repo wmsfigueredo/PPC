@@ -16,9 +16,14 @@ type Page = "mapa" | "meus" | "cadastro" | "ocorrencias" | "abastecimento" | "pe
 
 export default function App() {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem("ppc-user");
-    return saved ? JSON.parse(saved) as User : null;
+    try {
+      const saved = localStorage.getItem("ppc-user");
+      return saved ? (JSON.parse(saved) as User) : null;
+    } catch {
+      return null;
+    }
   });
+
   const [currentPage, setCurrentPage] = useState<Page>("mapa");
   const [points, setPoints] = useState<Point[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<Point | null>(null);
@@ -35,7 +40,13 @@ export default function App() {
     try {
       const data = await api.getPoints();
       setPoints(data);
-      setSelectedPoint(current => current && data.some(point => point.id === current.id) ? data.find(point => point.id === current.id) || data[0] : data[0] || null);
+      if (data.length > 0) {
+        setSelectedPoint((current) =>
+          current && data.some((p) => p.id === current.id)
+            ? data.find((p) => p.id === current.id) || data[0]
+            : data[0]
+        );
+      }
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Erro ao conectar com o servidor.");
     } finally {
@@ -44,14 +55,22 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (user) void fetchPoints();
+    if (user) {
+      void fetchPoints();
+    }
   }, [user]);
 
-  const authenticate = async (mode: "login" | "register", data: { name?: string; email: string; password: string }): Promise<User> => {
-    const authenticatedUser = mode === "login"
-      ? await api.login(data.email, data.password)
-      : await api.register(data.name || "", data.email, data.password);
+  const authenticate = async (
+    mode: "login" | "register",
+    data: { name?: string; email: string; password: string; role?: "admin" | "user" }
+  ): Promise<User> => {
+    const authenticatedUser =
+      mode === "login"
+        ? await api.login(data.email, data.password)
+        : await api.register(data.name || "", data.email, data.password, data.role || "user");
+
     localStorage.setItem("ppc-user", JSON.stringify(authenticatedUser));
+    setUser(authenticatedUser);
     return authenticatedUser;
   };
 
@@ -69,20 +88,97 @@ export default function App() {
     showToast("Ponto cadastrado com sucesso.");
   };
 
-  if (!user) return <AuthScreen authenticate={authenticate} onAuthenticated={setUser} />;
-  if (loading) return <div style={{ padding: 20 }}>Carregando dados do banco...</div>;
+  const handleDeletePoint = async (id: number) => {
+    const confirmed = window.confirm("Tem certeza que deseja remover este ponto comunitário?");
+    if (!confirmed) return;
 
-  const page = selectedPoint
-    ? currentPage === "mapa" ? <MapPage points={points} currentPoint={selectedPoint} onSelectPoint={setSelectedPoint} onNavigate={setCurrentPage} notify={showToast} />
-      : currentPage === "meus" ? <ListPage points={points} onNavigate={setCurrentPage} />
-        : currentPage === "cadastro" ? <RegisterPage notify={showToast} onCreate={createPoint} />
-          : currentPage === "abastecimento" ? <SupplyPage point={selectedPoint} notify={showToast} onConfirm={async (water, food, notes) => { await api.registerSupply({ point_id: selectedPoint.id, supplied_water: water, supplied_food: food, notes }); await fetchPoints(); setCurrentPage("mapa"); showToast("Abastecimento registrado com sucesso."); }} />
-            : currentPage === "ocorrencias" ? <OccurrencesPage notify={showToast} />
-              : <ProfilePage user={user} />
-    : <RegisterPage notify={showToast} onCreate={createPoint} />;
+    try {
+      await api.deletePoint(id);
+      showToast("Ponto removido com sucesso.");
+      await fetchPoints();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Erro ao excluir o ponto.");
+    }
+  };
 
-  return <AppShell page={currentPage} onNavigate={setCurrentPage} onLogout={logout}>
-    {page}
-    {toastMessage && <div className="toast" role="status">{toastMessage}</div>}
-  </AppShell>;
+  if (!user) {
+  return <AuthScreen authenticate={authenticate as any} onAuthenticated={setUser} />;
+}
+
+  const renderContent = () => {
+    if (loading && points.length === 0) {
+      return <div style={{ padding: 40, textAlign: "center" }}>Carregando dados do mapa...</div>;
+    }
+
+    if (currentPage === "mapa") {
+      return (
+        <MapPage
+          points={points}
+          currentPoint={selectedPoint || points[0] || null!}
+          onSelectPoint={(p: any) => setSelectedPoint(p)}
+          onNavigate={setCurrentPage}
+          notify={showToast}
+          onDeletePoint={handleDeletePoint}
+          user={user}
+        />
+      );
+    }
+
+    if (currentPage === "meus") {
+      return <ListPage points={points} onNavigate={setCurrentPage} />;
+    }
+
+    if (currentPage === "cadastro") {
+      return <RegisterPage notify={showToast} onCreate={createPoint} />;
+    }
+
+    if (currentPage === "abastecimento") {
+      return selectedPoint ? (
+        <SupplyPage
+          point={selectedPoint}
+          notify={showToast}
+          onConfirm={async (water, food, notes) => {
+            await api.registerSupply({
+              point_id: selectedPoint.id,
+              supplied_water: water,
+              supplied_food: food,
+              notes,
+            });
+            await fetchPoints();
+            setCurrentPage("mapa");
+            showToast("Abastecimento registrado com sucesso.");
+          }}
+        />
+      ) : (
+        <div style={{ padding: 20 }}>Selecione um ponto no mapa primeiro.</div>
+      );
+    }
+
+    if (currentPage === "ocorrencias") {
+      return <OccurrencesPage notify={showToast} />;
+    }
+
+    if (currentPage === "perfil") {
+      return <ProfilePage user={user} />;
+    }
+
+    return null;
+  };
+
+  return (
+    <AppShell
+      page={currentPage}
+      onNavigate={setCurrentPage}
+      onLogout={logout}
+      user={user}
+      notify={showToast}
+    >
+      {renderContent()}
+      {toastMessage && (
+        <div className="toast" role="status">
+          {toastMessage}
+        </div>
+      )}
+    </AppShell>
+  );
 }

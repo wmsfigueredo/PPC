@@ -33,21 +33,37 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// CRIAR UM PONTO (Corresponde à tela "Cadastro de Ponto")
+// CRIAR UM PONTO ADM
+
+// CRIAR UM PONTO (Apenas Admin)
 router.post("/", async (req, res) => {
   try {
-    const { name, address, neighborhood, x, y, description, responsible } = req.body;
+    const userRole = req.headers['x-user-role'];
 
-    if (!name || !address || !neighborhood || x === undefined || y === undefined) {
-      return res.status(400).json({ error: "Campos obrigatórios faltando" });
+    if (userRole !== 'admin') {
+      return res.status(403).json({ error: "Apenas administradores podem cadastrar novos pontos." });
+    }
+
+    const { name, address, neighborhood, lat, lng, description, responsible } = req.body;
+
+    if (!name || !address || !neighborhood || lat === undefined || lng === undefined) {
+      return res.status(400).json({ error: "Campos obrigatórios faltando (nome, endereço, bairro, lat, lng)." });
     }
 
     const query = `
-      INSERT INTO points (name, address, neighborhood, x, y, description, responsible)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO points (name, address, neighborhood, lat, lng, description, responsible, status, status_text, water, food, x, y)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'green', 'Abastecido', true, true, 0, 0)
       RETURNING *;
     `;
-    const values = [name, address, neighborhood, x, y, description || "", responsible || "Sem responsável"];
+    const values = [
+      name,
+      address,
+      neighborhood,
+      lat,
+      lng,
+      description || "",
+      responsible || "Sem responsável"
+    ];
 
     const { rows } = await pool.query(query, values);
     return res.status(201).json(rows[0]);
@@ -57,6 +73,54 @@ router.post("/", async (req, res) => {
   }
 });
 
+// EXCLUIR UM PONTO (Apenas Admin)
+router.delete("/:id", async (req, res) => {
+  try {
+    const userRole = req.headers['x-user-role'];
+
+    if (userRole !== 'admin') {
+      return res.status(403).json({ error: "Apenas administradores podem remover pontos." });
+    }
+
+    const { id } = req.params;
+    await pool.query("DELETE FROM points WHERE id = $1", [id]);
+    return res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Erro ao excluir ponto" });
+  }
+});
+
+// ATUALIZAR UM PONTO
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, address, neighborhood, description, responsible } = req.body;
+
+    const query = `
+      UPDATE points
+      SET name = COALESCE($1, name),
+          address = COALESCE($2, address),
+          neighborhood = COALESCE($3, neighborhood),
+          description = COALESCE($4, description),
+          responsible = COALESCE($5, responsible)
+      WHERE id = $6
+      RETURNING *;
+    `;
+    const values = [name, address, neighborhood, description, responsible, id];
+
+    const { rows } = await pool.query(query, values);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Ponto não encontrado." });
+    }
+
+    return res.json(rows[0]);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Erro ao atualizar ponto." });
+  }
+});
 // ATUALIZAR UM PONTO
 router.put("/:id", async (req, res) => {
   try {

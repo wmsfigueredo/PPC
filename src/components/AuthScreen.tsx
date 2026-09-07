@@ -6,6 +6,7 @@ type AuthScreenProps = { onAuthenticated: (user: AuthUser) => void; authenticate
 
 export function AuthScreen({ onAuthenticated, authenticate }: AuthScreenProps) {
   const [isRegistering, setIsRegistering] = useState(false)
+  const [role, setRole] = useState<'user' | 'admin'>('user');
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
@@ -14,6 +15,7 @@ export function AuthScreen({ onAuthenticated, authenticate }: AuthScreenProps) {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    await authenticate("register", { name, email, password, role });
     if (!email || !password || (isRegistering && !name)) {
       setMessage('Preencha todos os campos para continuar.')
       return
@@ -37,6 +39,15 @@ export function AuthScreen({ onAuthenticated, authenticate }: AuthScreenProps) {
     <section className="login-hero"><Brand /><h1>Juntos por eles,<br /><span>cuidados por todos.</span></h1><p>Localize, cadastre e monitore pontos comunitários de alimentação para animais em situação de rua.</p><div className="pet-art">🐕 🐈</div></section>
     <section className="login-form"><h2>{isRegistering ? 'Crie sua conta' : 'Bem-vindo!'}</h2><p>{isRegistering ? 'Cadastre-se para participar da comunidade' : 'Faça login para continuar'}</p>
       <form onSubmit={submit}>
+        {isRegistering && (
+  <div className="field">
+    <label>Tipo de Perfil</label>
+    <select value={role} onChange={(e) => setRole(e.target.value as 'user' | 'admin')}>
+      <option value="user">Colaborador Comum (Visualizar e Abastecer)</option>
+      <option value="admin">Administrador (Gerenciar e Criar Pontos)</option>
+    </select>
+  </div>
+)}
         {isRegistering && <div className="field"><label htmlFor="name">Nome completo</label><input id="name" value={name} onChange={event => setName(event.target.value)} placeholder="Seu nome completo" /></div>}
         <div className="field"><label htmlFor="email">E-mail</label><input id="email" type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="seu@email.com" /></div>
         <div className="field"><label htmlFor="password">Senha</label><input id="password" type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="••••••••" /></div>
