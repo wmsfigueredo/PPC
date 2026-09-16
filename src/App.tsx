@@ -103,7 +103,7 @@ export default function App() {
 
   if (!user) {
   return <AuthScreen authenticate={authenticate as any} onAuthenticated={setUser} />;
-}
+ }
 
   const renderContent = () => {
     if (loading && points.length === 0) {
@@ -163,8 +163,8 @@ export default function App() {
     }
 
     return null;
+    
   };
-
   return (
     <AppShell
       page={currentPage}
@@ -174,11 +174,6 @@ export default function App() {
       notify={showToast}
     >
       {renderContent()}
-      {toastMessage && (
-        <div className="toast" role="status">
-          {toastMessage}
-        </div>
-      )}
     </AppShell>
   );
 }

@@ -1,6 +1,16 @@
 import type { Point, Incident, SupplyPayload, User } from "../types";
 const BASE_URL = "http://localhost:3333/api";
 
+async function handleResponse<T>(response: Response): Promise<T> {
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error((data as { error?: string }).error || "Ocorreu um erro na requisição.");
+  }
+
+  return data as T;
+}
+
 const getHeaders = () => {
   let role = "user";
   try {
@@ -27,30 +37,36 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || "Falha ao realizar login");
-    }
-    return res.json();
+
+    return handleResponse<User>(res);
   },
 
   async register(name: string, email: string, password: string, role: "admin" | "user" = "user"): Promise<User> {
-  const res = await fetch(`${BASE_URL}/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password, role }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Falha ao realizar cadastro");
-  }
-  return res.json();
-},
+    const res = await fetch(`${BASE_URL}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, password, role }),
+    });
+
+    return handleResponse<User>(res);
+    
+  },
+   async getUsers() {
+    const response = await fetch(`${BASE_URL}/auth/users`);
+    return handleResponse<any[]>(response);
+  },
+
+  async deleteUser(id: number) {
+    const response = await fetch(`${BASE_URL}/auth/users/${id}`, {
+      method: "DELETE",
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
   // --- PONTOS ---
   async getPoints(): Promise<Point[]> {
     const res = await fetch(`${BASE_URL}/points`);
-    if (!res.ok) throw new Error("Falha ao buscar pontos");
-    return res.json();
+    return handleResponse<Point[]>(res);
   },
 
   async createPoint(pointData: Omit<Point, "id">): Promise<Point> {
@@ -59,11 +75,8 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify(pointData),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || "Falha ao criar ponto");
-    }
-    return res.json();
+
+    return handleResponse<Point>(res);
   },
 
   async deletePoint(id: number): Promise<void> {
@@ -71,10 +84,8 @@ export const api = {
       method: "DELETE",
       headers: getHeaders(),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || "Falha ao excluir ponto");
-    }
+
+    await handleResponse<void>(res);
   },
 
   // --- ABASTECIMENTO ---
@@ -84,14 +95,14 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(supplyData),
     });
-    if (!res.ok) throw new Error("Falha ao registrar abastecimento");
+
+    await handleResponse<void>(res);
   },
 
   // --- OCORRÊNCIAS ---
   async getIncidents(): Promise<Incident[]> {
     const res = await fetch(`${BASE_URL}/incidents`);
-    if (!res.ok) throw new Error("Falha ao buscar ocorrências");
-    return res.json();
+    return handleResponse<Incident[]>(res);
   },
 
   async createIncident(incidentData: Partial<Incident>): Promise<Incident> {
@@ -100,7 +111,24 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(incidentData),
     });
-    if (!res.ok) throw new Error("Falha ao registrar ocorrência");
-    return res.json();
+
+    return handleResponse<Incident>(res);
   },
+
+  async updateIncidentStatus(id: number, status: string) {
+    const response = await fetch(`${BASE_URL}/incidents/${id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    return handleResponse<any>(response);
+  },
+
+  async deleteIncident(id: number) {
+    const response = await fetch(`${BASE_URL}/incidents/${id}`, {
+      method: "DELETE",
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+  
 };

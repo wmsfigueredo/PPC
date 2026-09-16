@@ -3,82 +3,99 @@ import { pool } from "../db.js";
 
 const router = Router();
 
-// LISTAR TODAS AS OCORRÊNCIAS (com filtro opcional por status via query params: ?status=Resolvida)
+// GET /api/incidents - Listar todas as ocorrências
 router.get("/", async (req, res) => {
   try {
-    const { status } = req.query;
-
-    let query = "SELECT * FROM incidents";
-    const values = [];
-
-    if (status) {
-      query += " WHERE status = $1";
-      values.push(status);
-    }
-
-    query += " ORDER BY created_at DESC";
-
-    const { rows } = await pool.query(query, values);
+    const query = `
+      SELECT 
+        i.id,
+        i.point_id,
+        i.user_id,
+        i.title,
+        i.description,
+        i.status,
+        i.created_at,
+        p.name AS point_name,
+        u.name AS user_name
+      FROM incidents i
+      LEFT JOIN points p ON i.point_id = p.id
+      LEFT JOIN users u ON i.user_id = u.id
+      ORDER BY i.id DESC;
+    `;
+    const { rows } = await pool.query(query);
     return res.json(rows);
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Erro ao buscar ocorrências" });
+    console.error("ERRO AO BUSCAR OCORRÊNCIAS:", error);
+    return res.status(500).json({ error: "Erro ao carregar lista de ocorrências." });
   }
 });
 
-// CRIAR UMA OCORRÊNCIA
+// POST /api/incidents - Criar uma nova ocorrência
 router.post("/", async (req, res) => {
   try {
-    const { point_id, title, point_name, icon, type } = req.body;
+    const { point_id, user_id, title, description } = req.body;
 
-    if (!title) {
-      return res.status(400).json({ error: "O título da ocorrência é obrigatório" });
+    if (!point_id || !title || !description) {
+      return res.status(400).json({ error: "Informe o ponto, título e descrição da ocorrência." });
     }
 
     const query = `
-      INSERT INTO incidents (point_id, type, icon, title, point_name, status, badge_color)
-      VALUES ($1, $2, $3, $4, $5, 'Em andamento', 'orange')
+      INSERT INTO incidents (point_id, user_id, title, description, status)
+      VALUES ($1, $2, $3, $4, 'aberta')
       RETURNING *;
     `;
-    const values = [
-      point_id || null,
-      type || "damage",
-      icon || "⚠",
-      title,
-      point_name || "Ponto Comunitário"
-    ];
-
-    const { rows } = await pool.query(query, values);
+    const { rows } = await pool.query(query, [point_id, user_id || null, title, description]);
     return res.status(201).json(rows[0]);
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Erro ao abrir ocorrência" });
+    console.error("ERRO AO REGISTRAR OCORRÊNCIA:", error);
+    return res.status(500).json({ error: "Erro interno ao registrar ocorrência." });
   }
 });
 
-// RESOLVER / ATUALIZAR STATUS DA OCORRÊNCIA
-router.patch("/:id/resolve", async (req, res) => {
+// PATCH /api/incidents/:id/status - Atualizar o status (ex: de 'aberta' para 'resolvida')
+router.patch("/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
+    const { status } = req.body; // 'aberta', 'em_analise', 'resolvida'
+
+    if (!status) {
+      return res.status(400).json({ error: "Status não informado." });
+    }
 
     const query = `
-      UPDATE incidents 
-      SET status = 'Resolvida',
-          badge_color = 'green'
-      WHERE id = $1
+      UPDATE incidents
+      SET status = $1
+      WHERE id = $2
       RETURNING *;
     `;
-
-    const { rows } = await pool.query(query, [id]);
+    const { rows } = await pool.query(query, [status, id]);
 
     if (rows.length === 0) {
-      return res.status(404).json({ error: "Ocorrência não encontrada" });
+      return res.status(404).json({ error: "Ocorrência não encontrada." });
     }
 
     return res.json(rows[0]);
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Erro ao resolver ocorrência" });
+    console.error("ERRO AO ATUALIZAR STATUS DA OCORRÊNCIA:", error);
+    return res.status(500).json({ error: "Erro ao atualizar ocorrência." });
+  }
+});
+
+// DELETE /api/incidents/:id - Excluir ocorrência
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const query = `DELETE FROM incidents WHERE id = $1 RETURNING id;`;
+    const { rows } = await pool.query(query, [id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Ocorrência não encontrada." });
+    }
+
+    return res.json({ message: "Ocorrência excluída com sucesso." });
+  } catch (error) {
+    console.error("ERRO AO DELETAR OCORRÊNCIA:", error);
+    return res.status(500).json({ error: "Erro ao excluir ocorrência." });
   }
 });
 
