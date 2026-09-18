@@ -1,10 +1,12 @@
 export type Page = 'mapa' | 'meus' | 'cadastro' | 'ocorrencias' | 'abastecimento' | 'perfil';
+export type UserRole = 'admin' | 'user';
+export type PointStatus = 'green' | 'orange' | 'red';
 
 export interface User {
   id?: number;
   name: string;
   email: string;
-  role?: 'admin' | 'user';
+  role?: UserRole;
 }
 
 export interface Point {
@@ -12,7 +14,7 @@ export interface Point {
   name: string;
   address: string;
   neighborhood: string;
-  status: 'green' | 'orange' | 'red';
+  status: PointStatus;
   status_text?: string;
   statusText?: string;
   responsible: string;
@@ -28,20 +30,33 @@ export interface Point {
   created_at?: string;
 }
 
+export type CreatePointInput = Pick<
+  Point,
+  'name' | 'address' | 'neighborhood' | 'description' | 'lat' | 'lng'
+> & {
+  responsible?: string;
+};
+
 // Compatibilidade de nomenclatura para componentes antigos
 export type PetPoint = Point;
 
 export interface Incident {
   id: number;
-  point_id: number | null;
-  type: string;
-  icon: string;
+  point_id: number;
+  user_id?: number;
   title: string;
-  point_name: string;
-  status: 'Em andamento' | 'Resolvida';
-  badge_color: string;
-  created_at?: string;
+  description: string;
+  status: 'aberta' | 'em_analise' | 'resolvida';
+  created_at: string;
+  point_name?: string;
+  user_name?: string;
 }
+
+export type CreateIncidentInput = Pick<Incident, 'point_id' | 'title' | 'description'> & {
+  user_id?: number;
+};
+
+export type IncidentStatus = Incident['status'];
 
 export interface SupplyPayload {
   point_id: number;

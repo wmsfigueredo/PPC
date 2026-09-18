@@ -1,4 +1,13 @@
-import type { Point, Incident, SupplyPayload, User } from "../types";
+import type {
+  CreateIncidentInput,
+  CreatePointInput,
+  Incident,
+  IncidentStatus,
+  Point,
+  SupplyPayload,
+  User,
+} from "../types";
+
 const BASE_URL = "http://localhost:3333/api";
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -11,7 +20,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-const getHeaders = () => {
+function getHeaders(): HeadersInit {
   let role = "user";
   try {
     const saved = localStorage.getItem("ppc-user");
@@ -51,9 +60,9 @@ export const api = {
     return handleResponse<User>(res);
     
   },
-   async getUsers() {
+  async getUsers(): Promise<User[]> {
     const response = await fetch(`${BASE_URL}/auth/users`);
-    return handleResponse<any[]>(response);
+    return handleResponse<User[]>(response);
   },
 
   async deleteUser(id: number) {
@@ -69,7 +78,7 @@ export const api = {
     return handleResponse<Point[]>(res);
   },
 
-  async createPoint(pointData: Omit<Point, "id">): Promise<Point> {
+  async createPoint(pointData: CreatePointInput): Promise<Point> {
     const res = await fetch(`${BASE_URL}/points`, {
       method: "POST",
       headers: getHeaders(),
@@ -101,27 +110,26 @@ export const api = {
 
   // --- OCORRÊNCIAS ---
   async getIncidents(): Promise<Incident[]> {
-    const res = await fetch(`${BASE_URL}/incidents`);
-    return handleResponse<Incident[]>(res);
+    const response = await fetch(`${BASE_URL}/incidents`);
+    return handleResponse<Incident[]>(response);
   },
 
-  async createIncident(incidentData: Partial<Incident>): Promise<Incident> {
-    const res = await fetch(`${BASE_URL}/incidents`, {
+  async createIncident(data: CreateIncidentInput): Promise<Incident> {
+    const response = await fetch(`${BASE_URL}/incidents`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(incidentData),
+      body: JSON.stringify(data),
     });
-
-    return handleResponse<Incident>(res);
+    return handleResponse<Incident>(response);
   },
 
-  async updateIncidentStatus(id: number, status: string) {
+  async updateIncidentStatus(id: number, status: IncidentStatus): Promise<Incident> {
     const response = await fetch(`${BASE_URL}/incidents/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
-    return handleResponse<any>(response);
+    return handleResponse<Incident>(response);
   },
 
   async deleteIncident(id: number) {

@@ -1,18 +1,16 @@
 import { useEffect, useState } from "react";
 import { api } from "./services/api";
-import type { Point, User } from "./types";
+import type { CreatePointInput, Page, Point, User, UserRole } from "./types";
 import { AppShell } from "./components/AppShell";
 import { AuthScreen } from "./components/AuthScreen";
 import {
+  OccurrencesPage,
   ListPage,
   MapPage,
-  OccurrencesPage,
   ProfilePage,
   RegisterPage,
   SupplyPage,
 } from "./pages/DashboardPages";
-
-type Page = "mapa" | "meus" | "cadastro" | "ocorrencias" | "abastecimento" | "perfil";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(() => {
@@ -34,7 +32,7 @@ export default function App() {
     setToastMessage(message);
     window.setTimeout(() => setToastMessage(""), 2600);
   };
-
+  
   const fetchPoints = async () => {
     setLoading(true);
     try {
@@ -62,7 +60,7 @@ export default function App() {
 
   const authenticate = async (
     mode: "login" | "register",
-    data: { name?: string; email: string; password: string; role?: "admin" | "user" }
+    data: { name?: string; email: string; password: string; role?: UserRole }
   ): Promise<User> => {
     const authenticatedUser =
       mode === "login"
@@ -81,7 +79,7 @@ export default function App() {
     setSelectedPoint(null);
   };
 
-  const createPoint = async (point: Omit<Point, "id">) => {
+  const createPoint = async (point: CreatePointInput) => {
     await api.createPoint(point);
     await fetchPoints();
     setCurrentPage("mapa");
@@ -102,20 +100,21 @@ export default function App() {
   };
 
   if (!user) {
-  return <AuthScreen authenticate={authenticate as any} onAuthenticated={setUser} />;
+    return <AuthScreen authenticate={authenticate} onAuthenticated={setUser} />;
  }
 
   const renderContent = () => {
     if (loading && points.length === 0) {
       return <div style={{ padding: 40, textAlign: "center" }}>Carregando dados do mapa...</div>;
+      
     }
 
     if (currentPage === "mapa") {
       return (
         <MapPage
           points={points}
-          currentPoint={selectedPoint || points[0] || null!}
-          onSelectPoint={(p: any) => setSelectedPoint(p)}
+          currentPoint={selectedPoint || points[0]}
+          onSelectPoint={setSelectedPoint}
           onNavigate={setCurrentPage}
           notify={showToast}
           onDeletePoint={handleDeletePoint}
@@ -155,11 +154,11 @@ export default function App() {
     }
 
     if (currentPage === "ocorrencias") {
-      return <OccurrencesPage notify={showToast} />;
+      return <OccurrencesPage user={user} points={points} notify={showToast} />;
     }
 
     if (currentPage === "perfil") {
-      return <ProfilePage user={user} />;
+      return <ProfilePage user={user} onLogout={logout} notify={showToast} />;
     }
 
     return null;
@@ -174,6 +173,7 @@ export default function App() {
       notify={showToast}
     >
       {renderContent()}
+      {toastMessage && <div className="toast" role="status">{toastMessage}</div>}
     </AppShell>
   );
 }

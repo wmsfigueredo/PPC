@@ -1,14 +1,21 @@
 
 import { useEffect, useState } from 'react'
-import type { PetPoint, User } from '../types'
+import type {
+  CreatePointInput,
+  Incident,
+  IncidentStatus,
+  Page,
+  PetPoint,
+  User,
+} from '../types'
 import InteractiveMap from '../components/InteractiveMap'
 import { api } from '../services/api'
 
 type PageProps = {
   points: PetPoint[]
-  currentPoint: PetPoint
+  currentPoint?: PetPoint | null
   onSelectPoint: (point: PetPoint) => void
-  onNavigate: (page: 'mapa' | 'cadastro' | 'abastecimento') => void
+  onNavigate: (page: Extract<Page, 'mapa' | 'cadastro' | 'abastecimento'>) => void
   notify: (message: string) => void
 }
 
@@ -91,9 +98,9 @@ export function MapPage({
 
           <div className="map" style={{ height: '480px', position: 'relative' }}>
             <InteractiveMap
-              points={filteredPoints as any}
-              currentPoint={currentPoint as any}
-              onSelectPoint={(point) => onSelectPoint(point as any)}
+              points={filteredPoints}
+              currentPoint={currentPoint}
+              onSelectPoint={onSelectPoint}
             />
 
             <div className="map-legend">
@@ -359,7 +366,7 @@ export function RegisterPage({
   onCreate,
 }: {
   notify: (message: string) => void
-  onCreate?: (point: Omit<PetPoint, 'id'>) => Promise<void>
+  onCreate?: (point: CreatePointInput) => Promise<void>
 }) {
   const [form, setForm] = useState({
     name: '',
@@ -399,15 +406,8 @@ export function RegisterPage({
         description,
         lat: coords.lat,
         lng: coords.lng,
-        x: 0,
-        y: 0,
-        status: 'green',
-        statusText: 'Abastecido',
         responsible: 'Sem responsável',
-        lastSupply: 'Recém cadastrado',
-        water: true,
-        food: true,
-      } as any)
+      })
     } catch {
       notify('Erro ao registrar novo ponto.')
     } finally {
@@ -491,50 +491,46 @@ interface OccurrencesPageProps {
   notify?: (msg: string) => void
 }
 
-interface OccurrenceItem {
-  id: number
-  point_id: number
-  user_id?: number
-  title: string
-  description: string
-  status: "aberta" | "em_analise" | "resolvida"
-  created_at: string
-  point_name?: string
-  user_name?: string
-}
-
-export function OccurrencesPage({ user, points, notify }: OccurrencesPageProps) {
-  const [occurrences, setOccurrences] = useState<OccurrenceItem[]>([])
+export function OccurrencesPage({ user, points = [], notify }: OccurrencesPageProps): import("react").JSX.Element {
+  const [occurrences, setOccurrences] = useState<Incident[]>([])
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Formulário de nova ocorrência
-  const [selectedPointId, setSelectedPointId] = useState<number>(points[0]?.id || 0)
+  // Inicialização segura usando a primeira posição ou 0
+  const [selectedPointId, setSelectedPointId] = useState<number>(() => {
+    return points && points.length > 0 ? points[0].id : 0
+  })
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
+
+  // Sincroniza a seleção quando os pontos são carregados assincronamente do backend
+  useEffect(() => {
+    if ((!selectedPointId || selectedPointId === 0) && points && points.length > 0) {
+      setSelectedPointId(points[0].id)
+    }
+  }, [points, selectedPointId])
 
   const isAdmin = user?.role === "admin"
 
   const fetchOccurrences = async () => {
     setLoading(true)
     try {
-      const data = await api.getIncidents()
-      setOccurrences(data as unknown as OccurrenceItem[])
+      const data = await api.getIncidents();
+      setOccurrences(data)
     } catch (error) {
       console.error("Erro ao carregar ocorrências:", error)
     } finally {
       setLoading(false)
     }
   }
-
   useEffect(() => {
     fetchOccurrences()
   }, [])
 
   const handleCreateOccurrence = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedPointId || !title.trim() || !description.trim()) {
-      if (notify) notify("Preencha todos os campos da ocorrência.")
+    if (!selectedPointId || selectedPointId === 0 || !title.trim() || !description.trim()) {
+      if (notify) notify("Preencha todos os campos da ocorrência e selecione um ponto válido.")
       return
     }
 
@@ -542,9 +538,10 @@ export function OccurrencesPage({ user, points, notify }: OccurrencesPageProps) 
     try {
       await api.createIncident({
         point_id: Number(selectedPointId),
+        user_id: user?.id,
         title: title.trim(),
         description: description.trim(),
-      } as any)
+      })
 
       if (notify) notify("Ocorrência registrada com sucesso!")
       setTitle("")
@@ -558,12 +555,12 @@ export function OccurrencesPage({ user, points, notify }: OccurrencesPageProps) 
     }
   }
 
-  const handleStatusChange = async (id: number, newStatus: string) => {
+  const handleStatusChange = async (id: number, newStatus: IncidentStatus) => {
     try {
       await api.updateIncidentStatus(id, newStatus)
       if (notify) notify("Status da ocorrência atualizado!")
       fetchOccurrences()
-    } catch (error) {
+    } catch {
       if (notify) notify("Erro ao atualizar status.")
     }
   }
@@ -574,7 +571,7 @@ export function OccurrencesPage({ user, points, notify }: OccurrencesPageProps) 
       await api.deleteIncident(id)
       if (notify) notify("Ocorrência excluída com sucesso.")
       fetchOccurrences()
-    } catch (error) {
+    } catch {
       if (notify) notify("Erro ao excluir ocorrência.")
     }
   }
@@ -595,11 +592,15 @@ export function OccurrencesPage({ user, points, notify }: OccurrencesPageProps) 
               value={selectedPointId}
               onChange={(e) => setSelectedPointId(Number(e.target.value))}
             >
-              {points.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} - {p.neighborhood}
-                </option>
-              ))}
+              {points.length === 0 ? (
+                <option value={0}>Nenhum ponto cadastrado</option>
+              ) : (
+                points.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} - {p.neighborhood}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
@@ -632,7 +633,7 @@ export function OccurrencesPage({ user, points, notify }: OccurrencesPageProps) 
             />
           </div>
 
-          <button className="primary" type="submit" disabled={submitting} style={{ marginTop: 8 }}>
+          <button className="primary" type="submit" disabled={submitting || points.length === 0} style={{ marginTop: 8 }}>
             {submitting ? "Enviando..." : "Enviar Ocorrência"}
           </button>
         </form>
