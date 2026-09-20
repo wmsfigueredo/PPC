@@ -58,6 +58,24 @@ export type CreateIncidentInput = Pick<Incident, 'point_id' | 'title' | 'descrip
 
 export type IncidentStatus = Incident['status'];
 
+export interface SupplyItem {
+  id: number;
+  point_id: number;
+  user_id?: number;
+  supply_type: string;
+  quantity?: string;
+  created_at: string;
+  point_name?: string;
+  user_name?: string;
+}
+
+export interface CreateSupplyInput {
+  point_id: number;
+  user_id?: number;
+  supply_type: string;
+  quantity?: string;
+}
+
 export interface SupplyPayload {
   point_id: number;
   supplied_water: boolean;
@@ -65,3 +83,15 @@ export interface SupplyPayload {
   notes?: string;
   supplied_at?: string;
 }
+
+export const SUPPLY_TYPES = [
+  'Ração e Água',
+  'Apenas Ração',
+  'Apenas Água',
+  'Limpeza / Manutenção',
+] as const;
+
+export const SUPPLY_QUANTITIES = ['100%', '75%', '50%'] as const;
+
+export type SupplyType = (typeof SUPPLY_TYPES)[number];
+export type SupplyQuantity = (typeof SUPPLY_QUANTITIES)[number];

@@ -1,9 +1,11 @@
 import type {
   CreateIncidentInput,
   CreatePointInput,
+  CreateSupplyInput,
   Incident,
   IncidentStatus,
   Point,
+  SupplyItem,
   SupplyPayload,
   User,
 } from "../types";
@@ -22,6 +24,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 function getHeaders(): HeadersInit {
   let role = "user";
+
   try {
     const saved = localStorage.getItem("ppc-user");
     if (saved) {
@@ -29,37 +32,42 @@ function getHeaders(): HeadersInit {
       if (parsed.role) role = parsed.role;
     }
   } catch {
-    // fallback se falhar parse
+    // fallback when parsing fails
   }
 
   return {
     "Content-Type": "application/json",
     "x-user-role": role,
   };
-};
+}
 
 export const api = {
   // --- AUTENTICAÇÃO ---
   async login(email: string, password: string): Promise<User> {
-    const res = await fetch(`${BASE_URL}/auth/login`, {
+    const response = await fetch(`${BASE_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
 
-    return handleResponse<User>(res);
+    return handleResponse<User>(response);
   },
 
-  async register(name: string, email: string, password: string, role: "admin" | "user" = "user"): Promise<User> {
-    const res = await fetch(`${BASE_URL}/auth/register`, {
+  async register(
+    name: string,
+    email: string,
+    password: string,
+    role: "admin" | "user" = "user"
+  ): Promise<User> {
+    const response = await fetch(`${BASE_URL}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email, password, role }),
     });
 
-    return handleResponse<User>(res);
-    
+    return handleResponse<User>(response);
   },
+
   async getUsers(): Promise<User[]> {
     const response = await fetch(`${BASE_URL}/auth/users`);
     return handleResponse<User[]>(response);
@@ -74,38 +82,53 @@ export const api = {
 
   // --- PONTOS ---
   async getPoints(): Promise<Point[]> {
-    const res = await fetch(`${BASE_URL}/points`);
-    return handleResponse<Point[]>(res);
+    const response = await fetch(`${BASE_URL}/points`);
+    return handleResponse<Point[]>(response);
   },
 
   async createPoint(pointData: CreatePointInput): Promise<Point> {
-    const res = await fetch(`${BASE_URL}/points`, {
+    const response = await fetch(`${BASE_URL}/points`, {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify(pointData),
     });
 
-    return handleResponse<Point>(res);
+    return handleResponse<Point>(response);
   },
 
   async deletePoint(id: number): Promise<void> {
-    const res = await fetch(`${BASE_URL}/points/${id}`, {
+    const response = await fetch(`${BASE_URL}/points/${id}`, {
       method: "DELETE",
       headers: getHeaders(),
     });
 
-    await handleResponse<void>(res);
+    await handleResponse<void>(response);
   },
 
   // --- ABASTECIMENTO ---
   async registerSupply(supplyData: SupplyPayload): Promise<void> {
-    const res = await fetch(`${BASE_URL}/supplies`, {
+    const response = await fetch(`${BASE_URL}/supplies`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(supplyData),
     });
 
-    await handleResponse<void>(res);
+    await handleResponse<void>(response);
+  },
+
+  async getSupplies(): Promise<SupplyItem[]> {
+    const response = await fetch(`${BASE_URL}/supplies`);
+    return handleResponse<SupplyItem[]>(response);
+  },
+
+  async createSupply(data: CreateSupplyInput): Promise<SupplyItem> {
+    const response = await fetch(`${BASE_URL}/supplies`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    return handleResponse<SupplyItem>(response);
   },
 
   // --- OCORRÊNCIAS ---
@@ -138,5 +161,4 @@ export const api = {
     });
     return handleResponse<{ message: string }>(response);
   },
-  
 };

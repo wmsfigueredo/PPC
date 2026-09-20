@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { api } from "./services/api";
 import type { CreatePointInput, Page, Point, User, UserRole } from "./types";
@@ -130,6 +131,7 @@ export default function App() {
     if (currentPage === "cadastro") {
       return <RegisterPage notify={showToast} onCreate={createPoint} />;
     }
+
 
     if (currentPage === "abastecimento") {
       return selectedPoint ? (

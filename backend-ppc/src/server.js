@@ -7,6 +7,8 @@ import incidentsRoutes from "./routes/incidents.routes.js"; // <- importe aqui
 import authRoutes from "./routes/auth.routes.js";
 import { ensureSchema } from "./db.js";
 
+
+
 dotenv.config();
 
 const app = express();
@@ -20,6 +22,7 @@ app.use("/api/points", pointsRoutes);
 app.use("/api/supplies", suppliesRoutes);
 app.use("/api/incidents", incidentsRoutes); // <- registre aqui
 app.use("/api/auth", authRoutes);
+app.use("/api/supplies", suppliesRoutes);
 
 ensureSchema()
   .then(() => app.listen(PORT, () => console.log(`Servidor rodando em http://localhost:${PORT}`)))

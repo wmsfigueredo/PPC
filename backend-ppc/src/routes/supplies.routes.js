@@ -63,4 +63,58 @@ router.post("/", async (req, res) => {
   }
 });
 
+// LISTAR todos os abastecimentos (com nome do ponto e do usuário)
+router.get("/", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        s.id,
+        s.point_id,
+        s.user_id,
+        s.supply_type,
+        s.quantity,
+        s.created_at,
+        p.name AS point_name,
+        u.name AS user_name
+      FROM supplies s
+      LEFT JOIN pet_points p ON s.point_id = p.id
+      LEFT JOIN users u ON s.user_id = u.id
+      ORDER BY s.created_at DESC
+    `);
+    return res.json(result.rows);
+  } catch (error) {
+    console.error("Erro ao buscar abastecimentos:", error);
+    return res.status(500).json({ error: "Erro interno no servidor." });
+  }
+});
+
+// REGISTRAR novo abastecimento
+router.post("/", async (req, res) => {
+  const { point_id, user_id, supply_type, quantity } = req.body;
+
+  if (!point_id || !supply_type) {
+    return res.status(400).json({ error: "Ponto e tipo de abastecimento são obrigatórios." });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO supplies (point_id, user_id, supply_type, quantity)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [point_id, user_id || null, supply_type, quantity || "100%"]
+    );
+
+    // Opcional: Atualizar a data do último abastecimento no ponto
+    await pool.query(
+      `UPDATE pet_points SET last_supplied_at = NOW() WHERE id = $1`,
+      [point_id]
+    );
+
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("Erro ao registrar abastecimento:", error);
+    return res.status(500).json({ error: "Erro ao registrar abastecimento." });
+  }
+});
+
 export default router;
