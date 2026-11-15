@@ -5,6 +5,7 @@ import pointsRoutes from "./routes/points.routes.js";
 import suppliesRoutes from "./routes/supplies.routes.js";
 import incidentsRoutes from "./routes/incidents.routes.js"; // <- importe aqui
 import authRoutes from "./routes/auth.routes.js";
+import notificationsRoutes from "./routes/notifications.routes.js";
 import { ensureSchema } from "./db.js";
 
 
@@ -22,6 +23,7 @@ app.use("/api/points", pointsRoutes);
 app.use("/api/supplies", suppliesRoutes);
 app.use("/api/incidents", incidentsRoutes); // <- registre aqui
 app.use("/api/auth", authRoutes);
+app.use("/api/notifications", notificationsRoutes);
 app.use("/api/supplies", suppliesRoutes);
 
 ensureSchema()

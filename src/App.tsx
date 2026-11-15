@@ -133,30 +133,37 @@ export default function App() {
     }
 
 
-    if (currentPage === "abastecimento") {
-      return selectedPoint ? (
-        <SupplyPage
-          point={selectedPoint}
-          notify={showToast}
-          onConfirm={async (water, food, notes) => {
-            await api.registerSupply({
-              point_id: selectedPoint.id,
-              supplied_water: water,
-              supplied_food: food,
-              notes,
-            });
+  if (currentPage === "abastecimento") {
+    return selectedPoint ? (
+      <SupplyPage
+        point={selectedPoint}
+        onCancel={() => setSelectedPoint(null)}
+        onConfirm={async (data) => {
+          try {
+            await api.registerSupply(data);
+            showToast("Abastecimento registrado com sucesso!");
+            setSelectedPoint(null);
             await fetchPoints();
-            setCurrentPage("mapa");
-            showToast("Abastecimento registrado com sucesso.");
-          }}
-        />
-      ) : (
-        <div style={{ padding: 20 }}>Selecione um ponto no mapa primeiro.</div>
-      );
-    }
+          } catch (error) {
+            console.error(error);
+            showToast("Erro ao registrar abastecimento.");
+          }
+        }}
+      />
+    ) : (
+      <div style={{ padding: 20 }}>Selecione um ponto no mapa primeiro.</div>
+    );
+  }
 
     if (currentPage === "ocorrencias") {
-      return <OccurrencesPage user={user} points={points} notify={showToast} />;
+      return (
+        <OccurrencesPage
+          user={user}
+          points={points}
+          currentPoint={selectedPoint || points[0] || null}
+          notify={showToast}
+        />
+      );
     }
 
     if (currentPage === "perfil") {
@@ -172,7 +179,6 @@ export default function App() {
       onNavigate={setCurrentPage}
       onLogout={logout}
       user={user}
-      notify={showToast}
     >
       {renderContent()}
       {toastMessage && <div className="toast" role="status">{toastMessage}</div>}

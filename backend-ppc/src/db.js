@@ -23,4 +23,26 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      point_id INTEGER NOT NULL REFERENCES points(id) ON DELETE CASCADE,
+      message TEXT NOT NULL,
+      type VARCHAR(30) NOT NULL,
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      dedupe_key TEXT
+    )
+  `);
+  await pool.query("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS dedupe_key TEXT");
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS notifications_dedupe_key_unique
+    ON notifications (dedupe_key)
+    WHERE dedupe_key IS NOT NULL
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS notifications_created_at_idx
+    ON notifications (created_at DESC)
+  `);
 }

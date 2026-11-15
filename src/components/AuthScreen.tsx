@@ -57,7 +57,6 @@ export function AuthScreen({ onAuthenticated, authenticate }: AuthScreenProps) {
       {modalMessage && (
         <div className="modal-overlay" onClick={() => setModalMessage(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-icon">⚠️</div>
             <h3>Atenção</h3>
             <p>{modalMessage}</p>
             <button
@@ -84,7 +83,6 @@ export function AuthScreen({ onAuthenticated, authenticate }: AuthScreenProps) {
           <p>
             Localize, cadastre e monitore pontos comunitários de alimentação para animais em situação de rua.
           </p>
-          <div className="pet-art">🐕 🐈</div>
         </section>
 
         <section className="login-form">

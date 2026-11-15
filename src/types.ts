@@ -17,6 +17,8 @@ export interface Point {
   status: PointStatus;
   status_text?: string;
   statusText?: string;
+  water_status?: 'cheio' | 'vazio';
+  food_status?: 'cheio' | 'vazio';
   responsible: string;
   last_supply?: string;
   lastSupply?: string;
@@ -54,6 +56,7 @@ export interface Incident {
 
 export type CreateIncidentInput = Pick<Incident, 'point_id' | 'title' | 'description'> & {
   user_id?: number;
+  point_name?: string;
 };
 
 export type IncidentStatus = Incident['status'];
@@ -67,6 +70,28 @@ export interface SupplyItem {
   created_at: string;
   point_name?: string;
   user_name?: string;
+}
+
+export interface SupplyHistoryItem {
+  id: number;
+  point_id: number;
+  user_id: number | null;
+  supplied_water: boolean;
+  supplied_food: boolean;
+  notes: string | null;
+  supplied_at: string | null;
+  point_name: string | null;
+  user_name: string | null;
+}
+
+export interface AppNotification {
+  id: number;
+  point_id: number;
+  point_name: string | null;
+  message: string;
+  type: string;
+  is_read: boolean;
+  created_at: string;
 }
 
 export interface CreateSupplyInput {

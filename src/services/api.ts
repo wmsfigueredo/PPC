@@ -1,12 +1,11 @@
 import type {
   CreateIncidentInput,
   CreatePointInput,
-  CreateSupplyInput,
   Incident,
   IncidentStatus,
+  AppNotification,
   Point,
-  SupplyItem,
-  SupplyPayload,
+  SupplyHistoryItem,
   User,
 } from "../types";
 
@@ -22,23 +21,44 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-function getHeaders(): HeadersInit {
-  let role = "user";
-
+function getStoredUser(): Partial<User> | null {
   try {
     const saved = localStorage.getItem("ppc-user");
-    if (saved) {
-      const parsed = JSON.parse(saved) as User;
-      if (parsed.role) role = parsed.role;
-    }
+    if (!saved) return null;
+
+    const parsed: unknown = JSON.parse(saved);
+    return parsed && typeof parsed === "object" ? (parsed as Partial<User>) : null;
   } catch {
-    // fallback when parsing fails
+    return null;
+  }
+}
+
+function isValidUserId(userId: unknown): userId is number {
+  return typeof userId === "number" && Number.isSafeInteger(userId) && userId > 0;
+}
+
+function getHeaders(): HeadersInit {
+  const user = getStoredUser();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-user-role": user?.role || "user",
+  };
+
+  if (isValidUserId(user?.id)) {
+    headers["x-user-id"] = String(user.id);
   }
 
-  return {
-    "Content-Type": "application/json",
-    "x-user-role": role,
-  };
+  return headers;
+}
+
+export interface SupplyData {
+  point_id: number;
+  user_id?: number;
+  supplied_water: boolean;
+  supplied_food: boolean;
+  water_status?: "cheio" | "vazio";
+  food_status?: "cheio" | "vazio";
+  notes?: string;
 }
 
 export const api = {
@@ -106,29 +126,42 @@ export const api = {
   },
 
   // --- ABASTECIMENTO ---
-  async registerSupply(supplyData: SupplyPayload): Promise<void> {
+  async registerSupply(data: SupplyData) {
+    const userId = getStoredUser()?.id;
+    const payload = {
+      ...data,
+      ...(isValidUserId(userId) ? { user_id: userId } : {}),
+    };
+
     const response = await fetch(`${BASE_URL}/supplies`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(supplyData),
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
     });
-
-    await handleResponse<void>(response);
+    return handleResponse<any>(response);
   },
 
-  async getSupplies(): Promise<SupplyItem[]> {
-    const response = await fetch(`${BASE_URL}/supplies`);
-    return handleResponse<SupplyItem[]>(response);
-  },
-
-  async createSupply(data: CreateSupplyInput): Promise<SupplyItem> {
+  async getSupplies(): Promise<SupplyHistoryItem[]> {
     const response = await fetch(`${BASE_URL}/supplies`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      method: "GET",
+      headers: getHeaders(),
     });
+    return handleResponse<SupplyHistoryItem[]>(response);
+  },
 
-    return handleResponse<SupplyItem>(response);
+  async getNotifications(): Promise<AppNotification[]> {
+    const response = await fetch(`${BASE_URL}/notifications`, {
+      headers: getHeaders(),
+    });
+    return handleResponse<AppNotification[]>(response);
+  },
+
+  async markNotificationRead(id: number): Promise<void> {
+    const response = await fetch(`${BASE_URL}/notifications/${id}/read`, {
+      method: "PATCH",
+      headers: getHeaders(),
+    });
+    await handleResponse<{ id: number; is_read: boolean }>(response);
   },
 
   // --- OCORRÊNCIAS ---

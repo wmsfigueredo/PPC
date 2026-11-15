@@ -1,69 +1,10 @@
+// src/routes/supplies.routes.js
 import { Router } from "express";
 import { pool } from "../db.js";
 
 const router = Router();
 
-// LISTAR HISTÓRICO DE ABASTECIMENTOS DE UM PONTO
-router.get("/point/:pointId", async (req, res) => {
-  try {
-    const { pointId } = req.params;
-    const { rows } = await pool.query(
-      "SELECT * FROM supplies WHERE point_id = $1 ORDER BY supplied_at DESC",
-      [pointId]
-    );
-    return res.json(rows);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Erro ao buscar histórico de abastecimentos" });
-  }
-});
-
-// REGISTRAR NOVO ABASTECIMENTO
-router.post("/", async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const { point_id, supplied_water, supplied_food, notes, supplied_at } = req.body;
-
-    if (!point_id) {
-      return res.status(400).json({ error: "O ID do ponto é obrigatório" });
-    }
-
-    await client.query("BEGIN");
-
-    // 1. Grava no histórico de abastecimento
-    const insertSupplyQuery = `
-      INSERT INTO supplies (point_id, supplied_water, supplied_food, notes, supplied_at)
-      VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_TIMESTAMP))
-      RETURNING *;
-    `;
-    const supplyValues = [point_id, !!supplied_water, !!supplied_food, notes || "", supplied_at || null];
-    const supplyResult = await client.query(insertSupplyQuery, supplyValues);
-
-    // 2. Atualiza os dados de status no ponto correspondente
-    const updatePointQuery = `
-      UPDATE points 
-      SET water = CASE WHEN $1 = true THEN true ELSE water END,
-          food = CASE WHEN $2 = true THEN true ELSE food END,
-          status = 'green',
-          status_text = 'Abastecido',
-          last_supply = 'Agora mesmo'
-      WHERE id = $3
-      RETURNING *;
-    `;
-    await client.query(updatePointQuery, [!!supplied_water, !!supplied_food, point_id]);
-
-    await client.query("COMMIT");
-    return res.status(201).json(supplyResult.rows[0]);
-  } catch (error) {
-    await client.query("ROLLBACK");
-    console.error(error);
-    return res.status(500).json({ error: "Erro ao registrar abastecimento" });
-  } finally {
-    client.release();
-  }
-});
-
-// LISTAR todos os abastecimentos (com nome do ponto e do usuário)
+// LISTAR ÚLTIMOS ABASTECIMENTOS (HISTÓRICO)
 router.get("/", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -71,49 +12,165 @@ router.get("/", async (req, res) => {
         s.id,
         s.point_id,
         s.user_id,
-        s.supply_type,
-        s.quantity,
-        s.created_at,
+        s.supplied_water,
+        s.supplied_food,
+        s.notes,
+        s.supplied_at,
         p.name AS point_name,
         u.name AS user_name
       FROM supplies s
-      LEFT JOIN pet_points p ON s.point_id = p.id
+      LEFT JOIN points p ON s.point_id = p.id
       LEFT JOIN users u ON s.user_id = u.id
-      ORDER BY s.created_at DESC
+      ORDER BY s.supplied_at DESC
+      LIMIT 20
     `);
     return res.json(result.rows);
   } catch (error) {
-    console.error("Erro ao buscar abastecimentos:", error);
-    return res.status(500).json({ error: "Erro interno no servidor." });
+    console.error("ERRO AO BUSCAR ABASTECIMENTOS:", error);
+    return res.status(500).json({ error: "Erro ao buscar histórico de abastecimentos." });
   }
 });
 
-// REGISTRAR novo abastecimento
+// REGISTRAR / ALTERAR ABASTECIMENTO E STATUS
 router.post("/", async (req, res) => {
-  const { point_id, user_id, supply_type, quantity } = req.body;
+  const point_id = Number(req.body.point_id ?? req.body.pointId);
+  const rawUserId = req.body.user_id ?? req.body.userId ?? req.get("x-user-id");
+  const { item_type, target_status, notes } = req.body;
 
-  if (!point_id || !supply_type) {
-    return res.status(400).json({ error: "Ponto e tipo de abastecimento são obrigatórios." });
+  if (!Number.isSafeInteger(point_id) || point_id <= 0) {
+    return res.status(400).json({ error: "O ponto (point_id) é obrigatório." });
   }
 
-  try {
-    const result = await pool.query(
-      `INSERT INTO supplies (point_id, user_id, supply_type, quantity)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [point_id, user_id || null, supply_type, quantity || "100%"]
-    );
+  const user_id = rawUserId === undefined || rawUserId === null || rawUserId === ""
+    ? null
+    : Number(rawUserId);
 
-    // Opcional: Atualizar a data do último abastecimento no ponto
-    await pool.query(
-      `UPDATE pet_points SET last_supplied_at = NOW() WHERE id = $1`,
+  if (user_id !== null && (!Number.isSafeInteger(user_id) || user_id <= 0)) {
+    return res.status(400).json({ error: "O identificador do utilizador é inválido." });
+  }
+
+  // 1. Determina se água e ração estão sendo atualizadas
+  let supplied_water = false;
+  let supplied_food = false;
+
+  if (req.body.supplied_water !== undefined) {
+    supplied_water = Boolean(req.body.supplied_water);
+  } else if (item_type === "water" || item_type === "both") {
+    supplied_water = true;
+  }
+
+  if (req.body.supplied_food !== undefined) {
+    supplied_food = Boolean(req.body.supplied_food);
+  } else if (item_type === "food" || item_type === "both") {
+    supplied_food = true;
+  }
+
+  // Fallback para payloads com quantity ou supply_type legados
+  if (!supplied_water && !supplied_food && req.body.quantity !== undefined) {
+    supplied_water = req.body.supply_type === "water" || String(req.body.quantity) !== "0";
+    supplied_food = req.body.supply_type === "food" || String(req.body.quantity) !== "0";
+  }
+
+  // 2. Determina e valida os status independentes
+  const water_status = req.body.water_status || target_status || "cheio";
+  const food_status = req.body.food_status || target_status || "cheio";
+
+  if (supplied_water && !["cheio", "vazio"].includes(water_status)) {
+    return res.status(400).json({ error: "Status da água inválido." });
+  }
+  if (supplied_food && !["cheio", "vazio"].includes(food_status)) {
+    return res.status(400).json({ error: "Status da ração inválido." });
+  }
+
+  let client;
+  let transactionStarted = false;
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN");
+    transactionStarted = true;
+
+    const pointResult = await client.query(
+      "SELECT name FROM points WHERE id = $1",
       [point_id]
     );
+    if (pointResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      transactionStarted = false;
+      return res.status(404).json({ error: "Ponto não encontrado." });
+    }
 
-    return res.status(201).json(result.rows[0]);
+    const pointName = pointResult.rows[0].name || `Ponto #${point_id}`;
+    const supplyResult = await client.query(
+      `INSERT INTO supplies (point_id, user_id, supplied_water, supplied_food, notes)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [
+        point_id,
+        user_id,
+        supplied_water,
+        supplied_food,
+        notes || null
+      ]
+    );
+
+    await client.query(
+      `INSERT INTO notifications (point_id, message, type)
+       VALUES ($1, $2, 'success')`,
+      [point_id, `Abastecimento registrado no ponto ${pointName}.`]
+    );
+
+    const updateFields = [];
+    const values = [point_id];
+
+    if (supplied_water) {
+      updateFields.push(`water_status = $${values.length + 1}`);
+      values.push(water_status);
+    }
+    if (supplied_food) {
+      updateFields.push(`food_status = $${values.length + 1}`);
+      values.push(food_status);
+    }
+
+    if (updateFields.length > 0) {
+      updateFields.push("last_supplied_at = NOW()");
+
+      await client.query(
+        `UPDATE points SET ${updateFields.join(", ")} WHERE id = $1`,
+        values
+      );
+
+      if (supplied_water && water_status === "vazio") {
+        await client.query(
+          `INSERT INTO notifications (point_id, message, type)
+           VALUES ($1, $2, 'warning')`,
+          [point_id, `O ponto ${pointName} está com falta de água.`]
+        );
+      }
+
+      if (supplied_food && food_status === "vazio") {
+        await client.query(
+          `INSERT INTO notifications (point_id, message, type)
+           VALUES ($1, $2, 'warning')`,
+          [point_id, `O ponto ${pointName} está com falta de ração.`]
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+    transactionStarted = false;
+    return res.status(201).json(supplyResult.rows[0]);
   } catch (error) {
-    console.error("Erro ao registrar abastecimento:", error);
-    return res.status(500).json({ error: "Erro ao registrar abastecimento." });
+    if (client && transactionStarted) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        console.error("ERRO AO REVERTER ABASTECIMENTO:", rollbackError);
+      }
+    }
+    console.error("ERRO AO REGISTRAR ABASTECIMENTO:", error);
+    return res.status(500).json({ error: "Erro interno ao registrar abastecimento." });
+  } finally {
+    client?.release();
   }
 });
 
